@@ -62,6 +62,8 @@ type TokenType int
 const (
 	INTEGER TokenType = iota
 	PLUS
+	MUL
+	MINUS
 	EOF
 )
 
@@ -82,7 +84,8 @@ type Token struct {
 type Lexer struct {
 	text          string
 	pos           int
-	current_Token Token
+	current_token Token
+	current_char  rune
 }
 
 // compare the current token type with the passed token
@@ -90,9 +93,9 @@ type Lexer struct {
 // and assign the next token to the self.current_token,
 // otherwise raise an exception.
 func (l *Lexer) Eat(tokenType TokenType) error {
-	if l.current_Token.tokenType == tokenType {
+	if l.current_token.tokenType == tokenType {
 		if token, err := l.Get_Next_Token(); err == nil {
-			l.current_Token = token
+			l.current_token = token
 			return nil
 		}
 
@@ -100,73 +103,123 @@ func (l *Lexer) Eat(tokenType TokenType) error {
 	return fmt.Errorf("Error parsing input")
 }
 
+// advance position and set current char
+func (l *Lexer) Advance() {
+	l.pos += 1
+	if l.pos > len(l.text)-1 {
+		l.current_char = rune(0)
+	} else {
+		l.current_char = rune(l.text[l.pos])
+	}
+}
+
 // skip whitespace
 func (l *Lexer) SkipWhiteSpace() {
-	if l.pos < len(l.text)-1 && unicode.IsSpace(rune(l.text[l.pos])) {
-		l.pos++
+	for l.current_char != rune(0) && unicode.IsSpace(l.current_char) {
+		l.Advance()
 	}
+}
+
+// integer (multple integers)
+func (l *Lexer) Integer() int {
+
+	var result string
+	for l.current_char != rune(0) && unicode.IsNumber(l.current_char) {
+		result += string(l.current_char)
+		l.Advance()
+	}
+	// Convert string to int
+	val, _ := strconv.Atoi(result)
+	return val
 }
 
 // Get next token
 func (l *Lexer) Get_Next_Token() (Token, error) {
-
-	l.SkipWhiteSpace()
-
-	if l.pos > len(l.text)-1 {
-		return Token{tokenType: EOF, value: nil}, nil
-	}
-
-	text := l.text
-
-	current_char := rune(text[l.pos])
-
-	if unicode.IsNumber(current_char) {
-		start := l.pos
-		for l.pos < len(l.text)-1 && unicode.IsNumber(rune(l.text[l.pos])) {
-			l.pos++
+	for l.current_char != rune(0) {
+		if unicode.IsSpace(l.current_char) {
+			l.SkipWhiteSpace()
+			continue
 		}
 
-		parsedVal, err := strconv.Atoi(string(l.text[start:l.pos]))
-		if err != nil {
-			return Token{}, fmt.Errorf("failed to parse integer: %v", text[start:l.pos])
+		if unicode.IsNumber(l.current_char) {
+			return Token{tokenType: INTEGER, value: l.Integer()}, nil
 		}
-		return Token{tokenType: INTEGER, value: parsedVal}, nil
+
+		if l.current_char == '+' {
+			l.Advance()
+			return Token{tokenType: PLUS, value: l.current_char}, nil
+		}
+
+		if l.current_char == '-' {
+			l.Advance()
+			return Token{tokenType: MINUS, value: l.current_char}, nil
+		}
+
+		if l.current_char == '*' {
+			l.Advance()
+			return Token{tokenType: MUL, value: l.current_char}, nil
+		}
+
+		return Token{}, fmt.Errorf("invalid character: %c", l.current_char)
 	}
 
-	if string(current_char) == "+" {
-		l.pos += 1
-		return Token{tokenType: PLUS, value: string(current_char)}, nil
-	}
-
-	return Token{}, fmt.Errorf("Error passing input: %q", current_char)
+	return Token{tokenType: EOF, value: nil}, nil
 }
 
 // Expression => check if it follows grammer
+// expr -> INT PLUS INT
+// expr -> INT MINUS INT
+// expr -> INT MUL INT
 func (l *Lexer) Expr() (int, error) {
 	token, err := l.Get_Next_Token()
 	if err != nil {
 		return 0, err
 	}
 
-	l.current_Token = token
+	l.current_token = token
+	left := l.current_token
 
-	left := l.current_Token
 	if err := l.Eat(INTEGER); err != nil {
+		fmt.Println("Error eating INTEGER:", err)
 		return 0, err
 	}
 
-	// expects a plus
-	if err := l.Eat(PLUS); err != nil {
-		return 0, err
+	// expects an operator
+	op := l.current_token
+
+	if op.tokenType == PLUS {
+		if err := l.Eat(PLUS); err != nil {
+			fmt.Println("Error eating PLUS:", err)
+			return 0, err
+		}
+	} else if op.tokenType == MINUS {
+		if err := l.Eat(MINUS); err != nil {
+			fmt.Println("Error eating MINUS:", err)
+			return 0, err
+		}
+	} else if op.tokenType == MUL {
+		if err := l.Eat(MUL); err != nil {
+			fmt.Println("Error eating MUL:", err)
+			return 0, err
+		}
+	} else {
+		return 0, fmt.Errorf("expected operator, got: %+v", op)
 	}
 
-	right := l.current_Token
+	right := l.current_token
 	if err := l.Eat(INTEGER); err != nil {
+		fmt.Println("Error eating right INTEGER:", err)
 		return 0, err
 	}
 
-	result := left.value.(int) + right.value.(int)
+	var result int
+	if op.tokenType == PLUS {
+		result = left.value.(int) + right.value.(int)
+	} else if op.tokenType == MINUS {
+		result = left.value.(int) - right.value.(int)
+	} else {
+		result = left.value.(int) * right.value.(int)
+	}
 
 	return result, nil
-
 }
