@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"unicode"
 )
@@ -99,6 +100,7 @@ func (l *Lexer) Eat(tokenType TokenType) error {
 			return nil
 		}
 
+		return PARSERROR
 	}
 	return fmt.Errorf("Error parsing input")
 }
@@ -166,6 +168,16 @@ func (l *Lexer) Get_Next_Token() (Token, error) {
 	return Token{tokenType: EOF, value: nil}, nil
 }
 
+// checks if it matches the interger patter and returns the integer or err
+func (l *Lexer) Term() (interface{}, error) {
+	token := l.current_token
+	if err := l.Eat(INTEGER); err != nil {
+		return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
+	}
+
+	return token.value, nil
+}
+
 // Expression => check if it follows grammer
 // expr -> INT PLUS INT
 // expr -> INT MINUS INT
@@ -175,51 +187,76 @@ func (l *Lexer) Expr() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	l.current_token = token
-	left := l.current_token
 
-	if err := l.Eat(INTEGER); err != nil {
-		fmt.Println("Error eating INTEGER:", err)
-		return 0, err
+	result, err := l.Term()
+	if err != nil {
+		return 0, fmt.Errorf("%w: input does not match term", PARSERROR)
 	}
 
-	// expects an operator
-	op := l.current_token
-
-	if op.tokenType == PLUS {
-		if err := l.Eat(PLUS); err != nil {
-			fmt.Println("Error eating PLUS:", err)
-			return 0, err
+	for slices.Contains([]TokenType{PLUS, MINUS, MUL}, l.current_token.tokenType) {
+		token := l.current_token
+		if err := l.Eat(token.tokenType); err != nil {
+			return 0, fmt.Errorf("%w: invalid syntax %v", PARSERROR, token.value)
 		}
-	} else if op.tokenType == MINUS {
-		if err := l.Eat(MINUS); err != nil {
-			fmt.Println("Error eating MINUS:", err)
-			return 0, err
+		term, err := l.Term()
+		if err != nil {
+			return 0, fmt.Errorf("%w: invalid term %v", PARSERROR, token.value)
 		}
-	} else if op.tokenType == MUL {
-		if err := l.Eat(MUL); err != nil {
-			fmt.Println("Error eating MUL:", err)
-			return 0, err
+
+		switch token.tokenType {
+		case PLUS:
+			result = result.(int) + term.(int)
+		case MINUS:
+			result = result.(int) - term.(int)
+		case MUL:
+			result = result.(int) * term.(int)
 		}
-	} else {
-		return 0, fmt.Errorf("expected operator, got: %+v", op)
 	}
 
-	right := l.current_token
-	if err := l.Eat(INTEGER); err != nil {
-		fmt.Println("Error eating right INTEGER:", err)
-		return 0, err
-	}
+	return result.(int), nil
 
-	var result int
-	if op.tokenType == PLUS {
-		result = left.value.(int) + right.value.(int)
-	} else if op.tokenType == MINUS {
-		result = left.value.(int) - right.value.(int)
-	} else {
-		result = left.value.(int) * right.value.(int)
-	}
+	// if err := l.Eat(INTEGER); err != nil {
+	// 	fmt.Println("Error eating INTEGER:", err)
+	// 	return 0, err
+	// }
 
-	return result, nil
+	// // expects an operator
+	// op := l.current_token
+
+	// if op.tokenType == PLUS {
+	// 	if err := l.Eat(PLUS); err != nil {
+	// 		fmt.Println("Error eating PLUS:", err)
+	// 		return 0, err
+	// 	}
+	// } else if op.tokenType == MINUS {
+	// 	if err := l.Eat(MINUS); err != nil {
+	// 		fmt.Println("Error eating MINUS:", err)
+	// 		return 0, err
+	// 	}
+	// } else if op.tokenType == MUL {
+	// 	if err := l.Eat(MUL); err != nil {
+	// 		fmt.Println("Error eating MUL:", err)
+	// 		return 0, err
+	// 	}
+	// } else {
+	// 	return 0, fmt.Errorf("expected operator, got: %+v", op)
+	// }
+
+	// right := l.current_token
+	// if err := l.Eat(INTEGER); err != nil {
+	// 	fmt.Println("Error eating right INTEGER:", err)
+	// 	return 0, err
+	// }
+
+	// var result int
+	// if op.tokenType == PLUS {
+	// 	result = left.value.(int) + right.value.(int)
+	// } else if op.tokenType == MINUS {
+	// 	result = left.value.(int) - right.value.(int)
+	// } else {
+	// 	result = left.value.(int) * right.value.(int)
+	// }
+
+	// return result, nil
 }
