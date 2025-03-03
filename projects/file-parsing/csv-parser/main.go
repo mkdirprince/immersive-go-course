@@ -30,7 +30,7 @@ func main() {
 			break
 		}
 
-		lexer := Lexer{text: input, pos: 0, current_Token: Token{}}
+		lexer := Lexer{text: input, pos: 0, current_token: Token{}, current_char: rune(input[0])}
 		result, err := lexer.Expr()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
