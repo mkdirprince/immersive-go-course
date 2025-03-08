@@ -7,6 +7,25 @@ import (
 	"unicode"
 )
 
+// context-free grammar
+// Grammar - specifies syntax of a language
+// Serve as great doc
+// Good starting point to write your parser
+// expressing this "7 * 4 /2 * 3"
+
+/*
+expr : factor((MUL | DIV) factor)*
+factor: INTEGER
+
+
+Rule/production => methods or function
+a1 | a2 => if else if else
+(...)* => while loop
+Token => call to eat
+
+
+**/
+
 // tokenize (lexer) - convert input string into tokens (object of type and value) - get_next_token  (position s key here) - (text, pos)
 
 // expr - veries of series of token matches corresponding to a grammar rule
@@ -65,6 +84,7 @@ const (
 	PLUS
 	MUL
 	MINUS
+	DIV
 	EOF
 )
 
@@ -162,14 +182,19 @@ func (l *Lexer) Get_Next_Token() (Token, error) {
 			return Token{tokenType: MUL, value: l.current_char}, nil
 		}
 
+		if l.current_char == '/' {
+			l.Advance()
+			return Token{tokenType: DIV, value: l.current_char}, nil
+		}
+
 		return Token{}, fmt.Errorf("invalid character: %c", l.current_char)
 	}
 
 	return Token{tokenType: EOF, value: nil}, nil
 }
 
-// checks if it matches the interger patter and returns the integer or err
-func (l *Lexer) Term() (interface{}, error) {
+// Parses factors (i.e., just numbers in this case)
+func (l *Lexer) Factor() (interface{}, error) {
 	token := l.current_token
 	if err := l.Eat(INTEGER); err != nil {
 		return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
@@ -178,10 +203,45 @@ func (l *Lexer) Term() (interface{}, error) {
 	return token.value, nil
 }
 
+func (l *Lexer) Term() (int, error) {
+	result, err := l.Factor()
+	if err != nil {
+		return 0, fmt.Errorf("%w: input does not match term", PARSERROR)
+	}
+
+	for slices.Contains([]TokenType{MUL, DIV}, l.current_token.tokenType) {
+		token := l.current_token
+		if err := l.Eat(token.tokenType); err != nil {
+			return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
+		}
+
+		factor, err := l.Factor()
+		if err != nil {
+			return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
+		}
+
+		switch token.tokenType {
+		case MUL:
+			result = result.(int) * factor.(int)
+		case DIV:
+			if factor == 0 {
+				return 0, fmt.Errorf("division by zero: %w", PARSERROR)
+			}
+			result = result.(int) / factor.(int)
+		}
+	}
+
+	return result.(int), nil
+}
+
 // Expression => check if it follows grammer
 // expr -> INT PLUS INT
 // expr -> INT MINUS INT
 // expr -> INT MUL INT
+// Parses expressions (i.e., terms with + and -)
+// 3 * 3
+// token-3
+// result
 func (l *Lexer) Expr() (int, error) {
 	token, err := l.Get_Next_Token()
 	if err != nil {
@@ -194,27 +254,26 @@ func (l *Lexer) Expr() (int, error) {
 		return 0, fmt.Errorf("%w: input does not match term", PARSERROR)
 	}
 
-	for slices.Contains([]TokenType{PLUS, MINUS, MUL}, l.current_token.tokenType) {
+	for slices.Contains([]TokenType{PLUS, MINUS}, l.current_token.tokenType) {
 		token := l.current_token
 		if err := l.Eat(token.tokenType); err != nil {
-			return 0, fmt.Errorf("%w: invalid syntax %v", PARSERROR, token.value)
+			return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
 		}
+
 		term, err := l.Term()
 		if err != nil {
-			return 0, fmt.Errorf("%w: invalid term %v", PARSERROR, token.value)
+			return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
 		}
 
 		switch token.tokenType {
 		case PLUS:
-			result = result.(int) + term.(int)
+			result += term
 		case MINUS:
-			result = result.(int) - term.(int)
-		case MUL:
-			result = result.(int) * term.(int)
+			result -= term
 		}
 	}
 
-	return result.(int), nil
+	return result, nil
 
 	// if err := l.Eat(INTEGER); err != nil {
 	// 	fmt.Println("Error eating INTEGER:", err)
