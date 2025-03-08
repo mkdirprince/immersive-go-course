@@ -85,6 +85,8 @@ const (
 	MUL
 	MINUS
 	DIV
+	LPAREN
+	RPAREN
 	EOF
 )
 
@@ -107,6 +109,26 @@ type Lexer struct {
 	pos           int
 	current_token Token
 	current_char  rune
+}
+
+func NewLexer(text string) *Lexer {
+	l := &Lexer{
+		text: text,
+		pos:  0,
+	}
+
+	// Initialize current_char
+	if len(text) > 0 {
+		l.current_char = rune(text[0])
+	} else {
+		l.current_char = rune(0)
+	}
+
+	// Get the first token
+	token, _ := l.Get_Next_Token()
+	l.current_token = token
+
+	return l
 }
 
 // compare the current token type with the passed token
@@ -187,6 +209,16 @@ func (l *Lexer) Get_Next_Token() (Token, error) {
 			return Token{tokenType: DIV, value: l.current_char}, nil
 		}
 
+		if l.current_char == '(' {
+			l.Advance()
+			return Token{tokenType: LPAREN, value: l.current_char}, nil
+		}
+
+		if l.current_char == ')' {
+			l.Advance()
+			return Token{tokenType: RPAREN, value: l.current_char}, nil
+		}
+
 		return Token{}, fmt.Errorf("invalid character: %c", l.current_char)
 	}
 
@@ -194,13 +226,32 @@ func (l *Lexer) Get_Next_Token() (Token, error) {
 }
 
 // Parses factors (i.e., just numbers in this case)
-func (l *Lexer) Factor() (interface{}, error) {
+func (l *Lexer) Factor() (int, error) {
 	token := l.current_token
-	if err := l.Eat(INTEGER); err != nil {
-		return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
+
+	if token.tokenType == INTEGER {
+		if err := l.Eat(INTEGER); err != nil {
+			return 0, err
+		}
+		return token.value.(int), nil
+	} else if token.tokenType == LPAREN {
+		if err := l.Eat(LPAREN); err != nil {
+			return 0, err
+		}
+
+		result, err := l.Expr()
+		if err != nil {
+			return 0, err
+		}
+
+		if err := l.Eat(RPAREN); err != nil {
+			return 0, fmt.Errorf("missing closing parenthesis: %w", PARSERROR)
+		}
+
+		return result, nil
 	}
 
-	return token.value, nil
+	return 0, fmt.Errorf("invalid syntax %v: %w", token.value, PARSERROR)
 }
 
 func (l *Lexer) Term() (int, error) {
@@ -222,16 +273,16 @@ func (l *Lexer) Term() (int, error) {
 
 		switch token.tokenType {
 		case MUL:
-			result = result.(int) * factor.(int)
+			result = result * factor
 		case DIV:
 			if factor == 0 {
 				return 0, fmt.Errorf("division by zero: %w", PARSERROR)
 			}
-			result = result.(int) / factor.(int)
+			result = result / factor
 		}
 	}
 
-	return result.(int), nil
+	return result, nil
 }
 
 // Expression => check if it follows grammer
@@ -243,11 +294,6 @@ func (l *Lexer) Term() (int, error) {
 // token-3
 // result
 func (l *Lexer) Expr() (int, error) {
-	token, err := l.Get_Next_Token()
-	if err != nil {
-		return 0, err
-	}
-	l.current_token = token
 
 	result, err := l.Term()
 	if err != nil {

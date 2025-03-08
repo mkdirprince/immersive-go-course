@@ -31,7 +31,7 @@ func main() {
 			break
 		}
 
-		lexer := Lexer{text: input, pos: 0, current_token: Token{}, current_char: rune(input[0])}
+		lexer := NewLexer(input)
 		result, err := lexer.Expr()
 		if err != nil {
 			if errors.Is(err, PARSERROR) {
